@@ -9,7 +9,9 @@ URL: https://projectmyrsky.com/dashboardRadar
 Params:
 
 debug=0 ; [optional] default setting is 0, will enable debug features such as more update information and memory information (will be improved in future releases)
+
 service=0 ; [optional] default setting is 0. 0 = NOAA data source scrapped by 814server, gives faster updates but only available in US. 1 = Rainviewer, a highly rated source but often has a fair amount of delay between radar sweeps (covers Europe visit https://www.rainviewer.com/ for more coverage information)
+
 locations=[] ; [required] a json string of all the locations and settings per location (see example jsons below)
 
 JSON format:

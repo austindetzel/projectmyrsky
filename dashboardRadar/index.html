@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ProjectMyrskyRadar</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1" />
+    <script src="https://api.tiles.mapbox.com/mapbox-gl-js/v1.3.1/mapbox-gl.js"></script>
+    <link
+      href="https://api.tiles.mapbox.com/mapbox-gl-js/v1.3.1/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css"
+    />
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      rel="stylesheet"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    <style>
+      .marker {
+        background-image: url("data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyB2ZXJzaW9uPSIxLjEiIGlkPSJjaXJjbGUtc3Ryb2tlZCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB3aWR0aD0iMTUiIGhlaWdodD0iMTUiIHZpZXdCb3g9IjAgMCAxNSAxNSI+CiAgPHBhdGggaWQ9InBhdGg4NTY0LTUtNi00IiBkPSJNNy41LDBDMTEuNjQyMiwwLDE1LDMuMzU3OCwxNSw3LjVTMTEuNjQyMiwxNSw3LjUsMTUmI3hBOyYjeDk7UzAsMTEuNjQyMiwwLDcuNVMzLjM1NzgsMCw3LjUsMHogTTcuNSwxLjY2NjZjLTMuMjIxNywwLTUuODMzMywyLjYxMTctNS44MzMzLDUuODMzNFM0LjI3ODMsMTMuMzMzNCw3LjUsMTMuMzMzNCYjeEE7JiN4OTtzNS44MzMzLTIuNjExNyw1LjgzMzMtNS44MzM0UzEwLjcyMTcsMS42NjY2LDcuNSwxLjY2NjZ6Ii8+Cjwvc3ZnPg==");
+        background-size: cover;
+        filter: invert(53%) sepia(64%) saturate(3085%) hue-rotate(85deg)
+          brightness(125%) contrast(117%);
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+
+  <body style="margin: 0px; padding: 0px">
+    <div
+      id="time"
+      style="
+        position: absolute;
+        top: 0px;
+        bottom: 0px;
+        left: 0px;
+        z-index: 99;
+        padding: 10px;
+      "
+    >
+      <h4 id="clock" class="white-text" style="margin: 0px; padding: 0px">
+        Loading...
+      </h4>
+    </div>
+    <div
+      id="data"
+      style="
+        position: absolute;
+        top: 0px;
+        right: 0px;
+        z-index: 99;
+        padding: 10px;
+      "
+    >
+      <h6 class="white-text">Loading...</h6>
+    </div>
+    <div
+      id="map"
+      style="position: absolute; top: 0px; bottom: 0px; width: 100%"
+    ></div>
+    <script>
+      mapboxgl.accessToken =
+        "pk.eyJ1IjoiZnVuZ3V5cHJvIiwiYSI6ImZkN2EyODEwYTgxNjE1MTk5OGJlODRjM2U2MjIwNDY0In0.4nsadNh6xF8W-w7g7kpjnw";
+      const map = new mapboxgl.Map({
+        container: "map",
+        style: "mapbox://styles/mapbox/dark-v10",
+        zoom: 8.47,
+        center: [-74.03139, 40.60874],
+      });
+
+      window.map = map;
+
+      const queryString = window.location.search;
+
+      const urlParams = new URLSearchParams(queryString);
+
+      //var currentAutoZoom;
+      var moveIndex = 0;
+      var locations = urlParams.get("locations");
+      var radarService = urlParams.get("service");
+      if (radarService === undefined) {
+        radarService = 0;
+      }
+      var debugEN = urlParams.get("debug");
+
+      var mapControls;
+      var controlsLength;
+
+      if (isJsonString(locations)) {
+        mapControls = JSON.parse(locations);
+        controlsLength = mapControls.length;
+      } else {
+        document.getElementById("data").innerHTML =
+          "<h6 class='white-text'>JSON Error</h6>";
+      }
+      console.log(JSON.parse(locations));
+
+      var layerName;
+      var previousFrame;
+      var previousFrame2;
+      var mapLoaded = false;
+
+      var bandwith = 0;
+
+      function isJsonString(str) {
+        try {
+          JSON.parse(str);
+        } catch (e) {
+          return false;
+        }
+        return true;
+      }
+
+      function updateMap() {
+        if (mapLoaded) {
+          if (previousFrame == undefined) {
+            previousFrame = Date();
+          } else {
+          }
+
+          previousFrame = new Date();
+
+          fetch("https://projectmyrsky.com/tms")
+            .then((res) => res.json())
+            .then((data) => {
+              //console.log(data);
+
+              var dt = new Date(data.services[0].utc_valid);
+              //console.log(dt);
+
+              if (layerName == data.services[0].layername) {
+                return;
+              }
+
+              layerName = data.services[0].layername;
+              //console.log(layerName);
+
+              if (map.getLayer("radarImage")) {
+                map.removeLayer("radarImage");
+                map.removeSource("radarImage");
+              }
+              //layerName = ("NEXRAD N0Q @" +
+              //("0" + dt.getUTCHours()).slice(-2) +
+              //("0" + dt.getUTCMinutes()).slice(-2) +
+              //" UTC");
+
+              map.addLayer({
+                id: `radarImage`,
+                type: "raster",
+                source: {
+                  type: "raster",
+                  tiles: [
+                    "https://projectmyrsky.com/getradartile?service=" +
+                      radarService +
+                      "&tile=" +
+                      "{z}/{x}/{y}",
+                  ],
+                  tileSize: 256,
+                  //attribution: '<a href="https://www.rainviewer.com/api.html">Rainviewer API</a>'
+                },
+                layout: {
+                  visibility: "visible",
+                },
+                minzoom: 0,
+                maxzoom: 12,
+              });
+              updateHierarchy();
+            });
+          //services[0].utc_valid
+
+          //map.setPaintProperty(previousFrame2, 'raster-opacity', 0.9);
+
+          //previousFrame = previousFrame2;
+        }
+      }
+
+      function updateHierarchy() {
+        if (map.getLayer("nws-alerts-outline-map")) {
+          map.moveLayer("nws-alerts-outline-map");
+        }
+        if (map.getLayer("nws-alerts-map")) {
+          map.moveLayer("nws-alerts-map");
+        }
+        if (map.getLayer("nws-alerts-labels")) {
+          map.moveLayer("nws-alerts-labels");
+        }
+        if (map.getLayer("layer-with-pulsing-dot")) {
+          map.moveLayer("layer-with-pulsing-dot");
+        }
+      }
+
+      setInterval(updateMap, 60000);
+      setInterval(updateClock, 1000);
+      setInterval(updateData, 5000);
+
+      function updateData() {
+        fetch("https://projectmyrsky.com/radarInformation")
+          .then((res) => res.json())
+          .then((data) => {
+            //console.log(data);
+            var infoBarHtml = "";
+            var options = {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            };
+
+            var updateDate;
+
+            if (radarService == 1) {
+              updateDate = new Date(data.updateTimeNOAA);
+            } else {
+              updateDate = new Date(data.updateTimeRainviewer);
+            }
+
+            var updateCheckTime = Date(data.updateCheckTime);
+            updateCheckTime = new Date(updateCheckTime);
+
+            infoBarHtml += buildDataHtml(
+              "Radar Last Update",
+              updateDate.toLocaleTimeString(),
+              "update"
+            );
+
+            if (debugEN == 1) {
+              infoBarHtml += buildDataHtml(
+                "Last Update Check",
+                updateCheckTime.toLocaleTimeString(),
+                "history"
+              );
+              infoBarHtml += buildDataHtml(
+                "Memory Used",
+                Math.round(window.performance.memory.usedJSHeapSize / 8e6) +
+                  "MB",
+                "memory"
+              );
+            }
+            //console.log(data);
+
+            document.getElementById("data").innerHTML = infoBarHtml;
+          });
+      }
+
+      function buildDataHtml(name, value, icon) {
+        var builtHtml =
+          '<div class="row" style="padding: 0px; margin: 0px;"><h6 style="padding-bottom: 0px; padding-right: 10px; margin: 0px;" class="white-text right-align">' +
+          name +
+          '</h6>            <div class="valign-wrapper" style="padding: 0px; margin: 0px; justify-content: flex-end";><h5 style="padding: 0px; margin: 0px;" class="white-text right-align">' +
+          value +
+          '</h5><i style="padding: 0px; margin: 0px;" class="right-align white-text small material-icons">' +
+          icon +
+          "</i></div></div><br>";
+
+        return builtHtml;
+      }
+
+      function updateClock() {
+        var clockElement = document.getElementById("clock");
+        var dateNow = new Date();
+
+        var text = "";
+        if (dateNow.getHours() > 12) {
+          text += dateNow.getHours() - 12;
+        } else {
+          text += dateNow.getHours();
+        }
+
+        if (dateNow.getMinutes() < 10) {
+          text += ":0" + dateNow.getMinutes();
+        } else {
+          text += ":" + dateNow.getMinutes();
+        }
+
+        clockElement.innerHTML = text;
+      }
+
+      function updateWarnings() {
+        if (map.getLayer("nws-alerts-outline-map")) {
+          map.removeLayer("nws-alerts-outline-map");
+        }
+        if (map.getLayer("nws-alerts-map")) {
+          map.removeLayer("nws-alerts-map");
+        }
+        if (map.getLayer("nws-alerts-labels")) {
+          map.removeLayer("nws-alerts-labels");
+        }
+        if (map.getSource("nws-alerts")) {
+          map.removeSource("nws-alerts");
+        }
+        map.addSource("nws-alerts", {
+          type: "geojson",
+          // Use a URL for the value for the `data` property.
+          data: "https://projectmyrsky.com/nwswarnings",
+        });
+        //console.log("updatedWarnings");
+        map.addLayer({
+          id: "nws-alerts-labels",
+          type: "symbol",
+          source: "nws-alerts",
+          layout: {
+            "text-field": ["get", "event"],
+            "text-anchor": "center",
+          },
+          paint: {
+            "text-opacity": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              0,
+              0,
+              6.94,
+              0,
+              7.1,
+              1,
+              22,
+              1,
+            ],
+            "text-halo-color": "black",
+            "text-halo-width": 1,
+            "text-color": [
+              "match",
+              ["get", "event"],
+              ["Tornado Warning"],
+              "Red",
+              ["Severe Thunderstorm Warning"],
+              "Orange",
+              ["Flash Flood Warning"],
+              "Darkred",
+              ["Tsunami Warning"],
+              "Tomato",
+              ["Inland Hurricane Wind Warning"],
+              "#CD5C5C",
+              ["Hurricane Force Wind Warning"],
+              "#CD5C5C",
+              ["Hurricane Warning"],
+              "Crimson",
+              ["Typhoon Warning"],
+              "Crimson",
+              ["Storm Warning (&&)"],
+              "Plum",
+              ["Blizzard Warning"],
+              "Orangered",
+              ["Ice Storm Warning"],
+              "Darkmagenta",
+              ["Heavy Snow Warning"],
+              "Blueviolet",
+              ["Tropical Storm Warning"],
+              "Firebrick",
+              ["Winter Storm Warning"],
+              "Hotpink",
+              ["Inland Tropical Storm Warning"],
+              "Firebrick",
+              ["Coastal Flood Warning"],
+              "Forestgreen",
+              ["Lakeshore Flood Warning"],
+              "Forestgreen",
+              ["High Surf Warning"],
+              "Forestgreen",
+              ["Heavy Sleet Warning"],
+              "Skyblue",
+              ["Flood Warning"],
+              "Lime",
+              ["High Wind Warning"],
+              "Goldenrod",
+              ["Lake Effect Snow Warning"],
+              "Darkcyan",
+              ["Excessive Heat Warning"],
+              "Mediumvioletred",
+              ["Red Flag Warning"],
+              "Deeppink",
+              ["Wind Chill Warning"],
+              "Lightsteelblue",
+              ["Avalanche Warning"],
+              "Dodgerblue",
+              ["Dust Storm Warning"],
+              "Bisque",
+              ["Freeze Warning"],
+              "Cyan",
+              ["Gale Warning (&&)"],
+              "Darkviolet",
+              ["Flash Flood Statement"],
+              "Yellowgreen",
+              ["Special Marine Warning"],
+              "Palevioletred",
+              ["Severe Weather Statement"],
+              "Aqua",
+              ["Tornado Watch"],
+              "Yellow",
+              ["Severe Thunderstorm Watch"],
+              "Palevioletred",
+              ["Flash Flood Watch"],
+              "Limegreen",
+              ["Hurricane Watch"],
+              "Magenta",
+              ["Typhoon Watch"],
+              "Magenta",
+              ["Hurricane Local Statement"],
+              "Mediumpurple",
+              ["Typhoon Local Statement"],
+              "Mediumpurple",
+              ["Snow and Blowing Snow Advisory"],
+              "Powderblue",
+              ["Freezing Rain Advisory"],
+              "Slateblue",
+              ["Freezing Drizzle Advisory"],
+              "Slateblue",
+              ["Sleet Advisory"],
+              "Mediumslateblue",
+              ["Winter Weather Advisory"],
+              "Burlywood",
+              ["Lake Effect Snow Advisory"],
+              "Mediumturquoise",
+              ["Wind Chill Advisory"],
+              "Paleturquoise",
+              ["Heat Advisory"],
+              "Coral",
+              ["High Surf Advisory"],
+              "Mediumorchid",
+              ["Blowing Snow Advisory"],
+              "Lightblue",
+              ["Snow Advisory"],
+              "Mediumblue",
+              ["Heavy Freezing Spray Warning"],
+              "Deepskyblue",
+              ["Dense Smoke Advisory"],
+              "Khaki",
+              ["Small Craft Advisory (&&)"],
+              "Thistle",
+              ["Dense Fog Advisory"],
+              "Slategray",
+              ["Marine Weather Statement"],
+              "Darkorchid",
+              ["Lake Wind Advisory"],
+              "Tan",
+              ["Wind Advisory"],
+              "Lightgreen",
+              ["Blowing Dust Advisory"],
+              "Darkkhaki",
+              ["Frost Advisory"],
+              "Cornflowerblue",
+              ["Ashfall Advisory"],
+              "Darkgray",
+              ["Freezing Fog Advisory"],
+              "Teal",
+              ["Air Stagnation Advisory"],
+              "Gray",
+              ["Tsunami Watch"],
+              "#FF00FF",
+              ["Coastal Flood Watch"],
+              "Mediumaquamarine",
+              ["Lakeshore Flood Watch"],
+              "Mediumaquamarine",
+              ["Flood Watch"],
+              "Seagreen",
+              ["Blizzard Watch"],
+              "Greenyellow",
+              ["Inland Tropical Storm Watch"],
+              "Lightcoral",
+              ["Tropical Storm Watch"],
+              "Lightcoral",
+              ["Inland Hurricane Wind Watch"],
+              "Lightsalmon",
+              ["Winter Storm Watch"],
+              "Darkblue",
+              ["Lake Effect Snow Watch"],
+              "Peru",
+              ["High Wind Watch"],
+              "Darkgoldenrod",
+              ["Excessive Heat Watch"],
+              "Maroon",
+              ["Wind Chill Watch"],
+              "Cadetblue",
+              ["Freeze Watch"],
+              "Navy",
+              ["Fire Weather Watch"],
+              "navajowhite",
+              ["Avalanche Watch"],
+              "Sandybrown",
+              ["Earthquake Warning"],
+              "Sandybrown",
+              ["Local Area Emergency"],
+              "Silver",
+              ["Law Enforcement Warning"],
+              "Silver",
+              ["911 Telephone Outage"],
+              "Silver",
+              ["Hazardous Materials Warning"],
+              "Indigo",
+              ["Nuclear Hazard Warning"],
+              "Indigo",
+              ["Radiological Hazard Warning"],
+              "Indigo",
+              ["Civil Danger Warning"],
+              "Lightpink",
+              ["Civil Emergency Message"],
+              "Lightpink",
+              ["Evacuation - Immediate"],
+              "Chartreuse",
+              ["Fire Warning"],
+              "Sienna",
+              ["Shelter In Place Warning"],
+              "Salmon",
+              ["Volcano Warning"],
+              "Dimgray",
+              ["Coastal Flood Statement"],
+              "Olivedrab",
+              ["Lakeshore Flood Statement"],
+              "Olivedrab",
+              ["Flood Statement"],
+              "Springgreen",
+              ["Special Weather Statement"],
+              "Moccasin",
+              ["Short Term Forecast"],
+              "Darkseagreen",
+              ["Fire Danger Statement"],
+              "Darksalmon",
+              ["Hazardous Weather Outlook"],
+              "Palegoldenrod",
+              ["Child Abduction Emergency"],
+              "Gold",
+              "white",
+            ],
+          },
+        });
+
+        map.addLayer(
+          {
+            id: "nws-alerts-map",
+            type: "fill",
+            source: "nws-alerts",
+            paint: {
+              "fill-color": [
+                "match",
+                ["get", "event"],
+                ["Tornado Warning"],
+                "Red",
+                ["Severe Thunderstorm Warning"],
+                "Orange",
+                ["Flash Flood Warning"],
+                "Darkred",
+                ["Tsunami Warning"],
+                "Tomato",
+                ["Inland Hurricane Wind Warning"],
+                "#CD5C5C",
+                ["Hurricane Force Wind Warning"],
+                "#CD5C5C",
+                ["Hurricane Warning"],
+                "Crimson",
+                ["Typhoon Warning"],
+                "Crimson",
+                ["Storm Warning (&&)"],
+                "Plum",
+                ["Blizzard Warning"],
+                "Orangered",
+                ["Ice Storm Warning"],
+                "Darkmagenta",
+                ["Heavy Snow Warning"],
+                "Blueviolet",
+                ["Tropical Storm Warning"],
+                "Firebrick",
+                ["Winter Storm Warning"],
+                "Hotpink",
+                ["Inland Tropical Storm Warning"],
+                "Firebrick",
+                ["Coastal Flood Warning"],
+                "Forestgreen",
+                ["Lakeshore Flood Warning"],
+                "Forestgreen",
+                ["High Surf Warning"],
+                "Forestgreen",
+                ["Heavy Sleet Warning"],
+                "Skyblue",
+                ["Flood Warning"],
+                "Lime",
+                ["High Wind Warning"],
+                "Goldenrod",
+                ["Lake Effect Snow Warning"],
+                "Darkcyan",
+                ["Excessive Heat Warning"],
+                "Mediumvioletred",
+                ["Red Flag Warning"],
+                "Deeppink",
+                ["Wind Chill Warning"],
+                "Lightsteelblue",
+                ["Avalanche Warning"],
+                "Dodgerblue",
+                ["Dust Storm Warning"],
+                "Bisque",
+                ["Freeze Warning"],
+                "Cyan",
+                ["Gale Warning (&&)"],
+                "Darkviolet",
+                ["Flash Flood Statement"],
+                "Yellowgreen",
+                ["Special Marine Warning"],
+                "Palevioletred",
+                ["Severe Weather Statement"],
+                "Aqua",
+                ["Tornado Watch"],
+                "Yellow",
+                ["Severe Thunderstorm Watch"],
+                "Palevioletred",
+                ["Flash Flood Watch"],
+                "Limegreen",
+                ["Hurricane Watch"],
+                "Magenta",
+                ["Typhoon Watch"],
+                "Magenta",
+                ["Hurricane Local Statement"],
+                "Mediumpurple",
+                ["Typhoon Local Statement"],
+                "Mediumpurple",
+                ["Snow and Blowing Snow Advisory"],
+                "Powderblue",
+                ["Freezing Rain Advisory"],
+                "Slateblue",
+                ["Freezing Drizzle Advisory"],
+                "Slateblue",
+                ["Sleet Advisory"],
+                "Mediumslateblue",
+                ["Winter Weather Advisory"],
+                "Burlywood",
+                ["Lake Effect Snow Advisory"],
+                "Mediumturquoise",
+                ["Wind Chill Advisory"],
+                "Paleturquoise",
+                ["Heat Advisory"],
+                "Coral",
+                ["High Surf Advisory"],
+                "Mediumorchid",
+                ["Blowing Snow Advisory"],
+                "Lightblue",
+                ["Snow Advisory"],
+                "Mediumblue",
+                ["Heavy Freezing Spray Warning"],
+                "Deepskyblue",
+                ["Dense Smoke Advisory"],
+                "Khaki",
+                ["Small Craft Advisory (&&)"],
+                "Thistle",
+                ["Dense Fog Advisory"],
+                "Slategray",
+                ["Marine Weather Statement"],
+                "Darkorchid",
+                ["Lake Wind Advisory"],
+                "Tan",
+                ["Wind Advisory"],
+                "Lightgreen",
+                ["Blowing Dust Advisory"],
+                "Darkkhaki",
+                ["Frost Advisory"],
+                "Cornflowerblue",
+                ["Ashfall Advisory"],
+                "Darkgray",
+                ["Freezing Fog Advisory"],
+                "Teal",
+                ["Air Stagnation Advisory"],
+                "Gray",
+                ["Tsunami Watch"],
+                "#FF00FF",
+                ["Coastal Flood Watch"],
+                "Mediumaquamarine",
+                ["Lakeshore Flood Watch"],
+                "Mediumaquamarine",
+                ["Flood Watch"],
+                "Seagreen",
+                ["Blizzard Watch"],
+                "Greenyellow",
+                ["Inland Tropical Storm Watch"],
+                "Lightcoral",
+                ["Tropical Storm Watch"],
+                "Lightcoral",
+                ["Inland Hurricane Wind Watch"],
+                "Lightsalmon",
+                ["Winter Storm Watch"],
+                "Darkblue",
+                ["Lake Effect Snow Watch"],
+                "Peru",
+                ["High Wind Watch"],
+                "Darkgoldenrod",
+                ["Excessive Heat Watch"],
+                "Maroon",
+                ["Wind Chill Watch"],
+                "Cadetblue",
+                ["Freeze Watch"],
+                "Navy",
+                ["Fire Weather Watch"],
+                "navajowhite",
+                ["Avalanche Watch"],
+                "Sandybrown",
+                ["Earthquake Warning"],
+                "Sandybrown",
+                ["Local Area Emergency"],
+                "Silver",
+                ["Law Enforcement Warning"],
+                "Silver",
+                ["911 Telephone Outage"],
+                "Silver",
+                ["Hazardous Materials Warning"],
+                "Indigo",
+                ["Nuclear Hazard Warning"],
+                "Indigo",
+                ["Radiological Hazard Warning"],
+                "Indigo",
+                ["Civil Danger Warning"],
+                "Lightpink",
+                ["Civil Emergency Message"],
+                "Lightpink",
+                ["Evacuation - Immediate"],
+                "Chartreuse",
+                ["Fire Warning"],
+                "Sienna",
+                ["Shelter In Place Warning"],
+                "Salmon",
+                ["Volcano Warning"],
+                "Dimgray",
+                ["Coastal Flood Statement"],
+                "Olivedrab",
+                ["Lakeshore Flood Statement"],
+                "Olivedrab",
+                ["Flood Statement"],
+                "Springgreen",
+                ["Special Weather Statement"],
+                "Moccasin",
+                ["Short Term Forecast"],
+                "Darkseagreen",
+                ["Fire Danger Statement"],
+                "Darksalmon",
+                ["Hazardous Weather Outlook"],
+                "Palegoldenrod",
+                ["Child Abduction Emergency"],
+                "Gold",
+                "white",
+              ],
+              "fill-opacity": 0.1,
+              //,
+              //'line-width': 1
+            },
+          },
+          "nws-alerts-labels"
+        );
+
+        map.addLayer(
+          {
+            id: "nws-alerts-outline-map",
+            type: "line",
+            source: "nws-alerts",
+            paint: {
+              "line-color": [
+                "match",
+                ["get", "event"],
+                ["Tornado Warning"],
+                "Red",
+                ["Severe Thunderstorm Warning"],
+                "Orange",
+                ["Flash Flood Warning"],
+                "Darkred",
+                ["Tsunami Warning"],
+                "Tomato",
+                ["Inland Hurricane Wind Warning"],
+                "#CD5C5C",
+                ["Hurricane Force Wind Warning"],
+                "#CD5C5C",
+                ["Hurricane Warning"],
+                "Crimson",
+                ["Typhoon Warning"],
+                "Crimson",
+                ["Storm Warning (&&)"],
+                "Plum",
+                ["Blizzard Warning"],
+                "Orangered",
+                ["Ice Storm Warning"],
+                "Darkmagenta",
+                ["Heavy Snow Warning"],
+                "Blueviolet",
+                ["Tropical Storm Warning"],
+                "Firebrick",
+                ["Winter Storm Warning"],
+                "Hotpink",
+                ["Inland Tropical Storm Warning"],
+                "Firebrick",
+                ["Coastal Flood Warning"],
+                "Forestgreen",
+                ["Lakeshore Flood Warning"],
+                "Forestgreen",
+                ["High Surf Warning"],
+                "Forestgreen",
+                ["Heavy Sleet Warning"],
+                "Skyblue",
+                ["Flood Warning"],
+                "Lime",
+                ["High Wind Warning"],
+                "Goldenrod",
+                ["Lake Effect Snow Warning"],
+                "Darkcyan",
+                ["Excessive Heat Warning"],
+                "Mediumvioletred",
+                ["Red Flag Warning"],
+                "Deeppink",
+                ["Wind Chill Warning"],
+                "Lightsteelblue",
+                ["Avalanche Warning"],
+                "Dodgerblue",
+                ["Dust Storm Warning"],
+                "Bisque",
+                ["Freeze Warning"],
+                "Cyan",
+                ["Gale Warning (&&)"],
+                "Darkviolet",
+                ["Flash Flood Statement"],
+                "Yellowgreen",
+                ["Special Marine Warning"],
+                "Palevioletred",
+                ["Severe Weather Statement"],
+                "Aqua",
+                ["Tornado Watch"],
+                "Yellow",
+                ["Severe Thunderstorm Watch"],
+                "Palevioletred",
+                ["Flash Flood Watch"],
+                "Limegreen",
+                ["Hurricane Watch"],
+                "Magenta",
+                ["Typhoon Watch"],
+                "Magenta",
+                ["Hurricane Local Statement"],
+                "Mediumpurple",
+                ["Typhoon Local Statement"],
+                "Mediumpurple",
+                ["Snow and Blowing Snow Advisory"],
+                "Powderblue",
+                ["Freezing Rain Advisory"],
+                "Slateblue",
+                ["Freezing Drizzle Advisory"],
+                "Slateblue",
+                ["Sleet Advisory"],
+                "Mediumslateblue",
+                ["Winter Weather Advisory"],
+                "Burlywood",
+                ["Lake Effect Snow Advisory"],
+                "Mediumturquoise",
+                ["Wind Chill Advisory"],
+                "Paleturquoise",
+                ["Heat Advisory"],
+                "Coral",
+                ["High Surf Advisory"],
+                "Mediumorchid",
+                ["Blowing Snow Advisory"],
+                "Lightblue",
+                ["Snow Advisory"],
+                "Mediumblue",
+                ["Heavy Freezing Spray Warning"],
+                "Deepskyblue",
+                ["Dense Smoke Advisory"],
+                "Khaki",
+                ["Small Craft Advisory (&&)"],
+                "Thistle",
+                ["Dense Fog Advisory"],
+                "Slategray",
+                ["Marine Weather Statement"],
+                "Darkorchid",
+                ["Lake Wind Advisory"],
+                "Tan",
+                ["Wind Advisory"],
+                "Lightgreen",
+                ["Blowing Dust Advisory"],
+                "Darkkhaki",
+                ["Frost Advisory"],
+                "Cornflowerblue",
+                ["Ashfall Advisory"],
+                "Darkgray",
+                ["Freezing Fog Advisory"],
+                "Teal",
+                ["Air Stagnation Advisory"],
+                "Gray",
+                ["Tsunami Watch"],
+                "#FF00FF",
+                ["Coastal Flood Watch"],
+                "Mediumaquamarine",
+                ["Lakeshore Flood Watch"],
+                "Mediumaquamarine",
+                ["Flood Watch"],
+                "Seagreen",
+                ["Blizzard Watch"],
+                "Greenyellow",
+                ["Inland Tropical Storm Watch"],
+                "Lightcoral",
+                ["Tropical Storm Watch"],
+                "Lightcoral",
+                ["Inland Hurricane Wind Watch"],
+                "Lightsalmon",
+                ["Winter Storm Watch"],
+                "Darkblue",
+                ["Lake Effect Snow Watch"],
+                "Peru",
+                ["High Wind Watch"],
+                "Darkgoldenrod",
+                ["Excessive Heat Watch"],
+                "Maroon",
+                ["Wind Chill Watch"],
+                "Cadetblue",
+                ["Freeze Watch"],
+                "Navy",
+                ["Fire Weather Watch"],
+                "navajowhite",
+                ["Avalanche Watch"],
+                "Sandybrown",
+                ["Earthquake Warning"],
+                "Sandybrown",
+                ["Local Area Emergency"],
+                "Silver",
+                ["Law Enforcement Warning"],
+                "Silver",
+                ["911 Telephone Outage"],
+                "Silver",
+                ["Hazardous Materials Warning"],
+                "Indigo",
+                ["Nuclear Hazard Warning"],
+                "Indigo",
+                ["Radiological Hazard Warning"],
+                "Indigo",
+                ["Civil Danger Warning"],
+                "Lightpink",
+                ["Civil Emergency Message"],
+                "Lightpink",
+                ["Evacuation - Immediate"],
+                "Chartreuse",
+                ["Fire Warning"],
+                "Sienna",
+                ["Shelter In Place Warning"],
+                "Salmon",
+                ["Volcano Warning"],
+                "Dimgray",
+                ["Coastal Flood Statement"],
+                "Olivedrab",
+                ["Lakeshore Flood Statement"],
+                "Olivedrab",
+                ["Flood Statement"],
+                "Springgreen",
+                ["Special Weather Statement"],
+                "Moccasin",
+                ["Short Term Forecast"],
+                "Darkseagreen",
+                ["Fire Danger Statement"],
+                "Darksalmon",
+                ["Hazardous Weather Outlook"],
+                "Palegoldenrod",
+                ["Child Abduction Emergency"],
+                "Gold",
+                "white",
+              ],
+              //,
+              "line-width": 2,
+            },
+          },
+          "nws-alerts-labels"
+        );
+
+        updateHierarchy();
+      }
+
+      function moveController() {
+        map.flyTo({
+          center: [mapControls[moveIndex].lon, mapControls[moveIndex].lat],
+          zoom: mapControls[moveIndex].zoom,
+        });
+        if (map.getSource("dot-point") !== undefined) {
+          map.removeLayer("layer-with-pulsing-dot");
+          map.removeSource("dot-point");
+        }
+        map.addSource("dot-point", {
+          type: "geojson",
+          data: {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                geometry: {
+                  type: "Point",
+                  coordinates: [
+                    mapControls[moveIndex].lon,
+                    mapControls[moveIndex].lat,
+                  ], // icon position [lng, lat]
+                },
+              },
+            ],
+          },
+          attribution:
+            '<a href="https://www.projectmyrsky.com">Project Myrsky</a>',
+        });
+        map.addLayer({
+          id: "layer-with-pulsing-dot",
+          type: "symbol",
+          source: "dot-point",
+          layout: {
+            "icon-image": "pulsing-dot",
+          },
+        });
+        setTimeout(moveController, mapControls[moveIndex].time * 1000);
+        moveIndex++;
+        if (moveIndex > controlsLength - 1) {
+          moveIndex = 0;
+        }
+
+        updateWarnings();
+      }
+
+      const size = 100;
+
+      const pulsingDot = {
+        width: size,
+        height: size,
+        data: new Uint8Array(size * size * 4),
+
+        // When the layer is added to the map,
+        // get the rendering context for the map canvas.
+        onAdd: function () {
+          const canvas = document.createElement("canvas");
+          canvas.width = this.width;
+          canvas.height = this.height;
+          this.context = canvas.getContext("2d");
+        },
+
+        // Call once before every frame where the icon will be used.
+        render: function () {
+          const duration = 1000;
+          const t = (performance.now() % duration) / duration;
+
+          const radius = (size / 2) * 0.3;
+          const outerRadius = (size / 2) * 0.7 * t + radius;
+          const context = this.context;
+
+          // Draw the outer circle.
+          context.clearRect(0, 0, this.width, this.height);
+          context.beginPath();
+          context.arc(
+            this.width / 2,
+            this.height / 2,
+            outerRadius,
+            0,
+            Math.PI * 2
+          );
+          context.fillStyle = `rgba(255, 200, 200, ${1 - t})`;
+          context.fill();
+
+          // Draw the inner circle.
+          context.beginPath();
+          context.arc(this.width / 2, this.height / 2, radius, 0, Math.PI * 2);
+          context.fillStyle = "rgba(255, 100, 100, 1)";
+          context.strokeStyle = "white";
+          context.lineWidth = 2 + 4 * (1 - t);
+          context.fill();
+          context.stroke();
+
+          // Update this image's data with data from the canvas.
+          this.data = context.getImageData(0, 0, this.width, this.height).data;
+
+          // Continuously repaint the map, resulting
+          // in the smooth animation of the dot.
+          map.triggerRepaint();
+
+          // Return `true` to let the map know that the image was updated.
+          return true;
+        },
+      }; //got this from mapbox
+
+      map.on("load", () => {
+        mapLoaded = true;
+        updateMap();
+        moveController();
+        updateData();
+        map.addImage("pulsing-dot", pulsingDot, {
+          pixelRatio: 2,
+        });
+      });
+    </script>
+  </body>
+</html>
